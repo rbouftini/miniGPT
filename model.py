@@ -65,7 +65,7 @@ class Block(nn.Module):
   def __init__(self,config):
     super().__init__()
     head_size = config.n_embed // config.n_heads
-    self.ma_head = MultiHeadAttention(head_size, config.n_heads)
+    self.ma_head = MultiHeadAttention(head_size, config)
     self.ffwd = FeedForward(config.n_embed, config.dropout)
     self.ln1 = nn.LayerNorm(config.n_embed)
     self.ln2 = nn.LayerNorm(config.n_embed)

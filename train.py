@@ -26,7 +26,7 @@ vocab = sorted(list(set(text)))
 vocab_size = len(vocab)
 
 model_parameters = dict( vocab_size = vocab_size, context_length = context_length, n_embed = n_embed, n_layers = n_layers,
-    n_heads =  n_heads, dropout = dropout)
+    n_heads = n_heads, dropout = dropout)
 
 #Tokenizing the text ~ Converting it to a sequence of integers according to our vocabulary
 #Creating two dictionaries: one to represent a token into an unique integer
