@@ -1,4 +1,5 @@
 from datasets import load_dataset
+import pickle
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -33,6 +34,11 @@ model_parameters = dict( vocab_size = vocab_size, context_length = context_lengt
 #Second to map back from the integer to the word
 itoi = {index:val for index,val in enumerate(vocab)}
 stoi = {val:index for index,val in enumerate(vocab)}
+
+tokenizers = {"itoi": itoi, "stoi" :stoi}
+with open("tokenizers.pkl", "w") as f:
+  pickle.dump(tokenizers, f)
+  
 encode = lambda s: [stoi[c] for c in s]
 decode = lambda l: ''.join([itoi[i] for i in l])
 
