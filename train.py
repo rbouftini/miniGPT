@@ -32,15 +32,15 @@ model_parameters = dict( vocab_size = vocab_size, context_length = context_lengt
 #Tokenizing the text ~ Converting it to a sequence of integers according to our vocabulary
 #Creating two dictionaries: one to represent a token into an unique integer
 #Second to map back from the integer to the word
-itoi = {index:val for index,val in enumerate(vocab)}
+itos = {index:val for index,val in enumerate(vocab)}
 stoi = {val:index for index,val in enumerate(vocab)}
 
-tokenizers = {"itoi": itoi, "stoi" :stoi}
-with open("tokenizers.pkl", "w") as f:
-  pickle.dump(tokenizers, f)
-  
+tokenizer = {"itos": itos, "stoi" :stoi}
+with open("tokenizer.pkl", "wb") as f:
+  pickle.dump(tokenizer, f)
+
 encode = lambda s: [stoi[c] for c in s]
-decode = lambda l: ''.join([itoi[i] for i in l])
+decode = lambda l: ''.join([itos[i] for i in l])
 
 data = torch.tensor(encode(text), dtype= torch.long)
 
@@ -85,8 +85,6 @@ for steps in range(max_iters):
   optimizer.zero_grad(set_to_none=True)
   loss.backward()
   optimizer.step()
-
-#text = decode(model.generate(torch.zeros((1,1), dtype=torch.long, device=device), max_new_tokens=10000)[0].tolist())
 
 torch.save(model.state_dict(), 'checkpoint.pth')
 
