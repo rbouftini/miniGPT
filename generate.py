@@ -15,7 +15,7 @@ decode = lambda l: ''.join([itos[i] for i in l])
 config = MiniGPTConfig()
 model = MiniGPT(config).to(device)
 
-model.load_state_dict(torch.load("checkpoint.pth"),map_location= device, weights_only = True)
+model.load_state_dict(torch.load("checkpoint.pth", map_location=device, weights_only=True))
 
 text = decode(model.generate(torch.zeros((1,1), dtype=torch.long, device=device), max_new_tokens=10000)[0].tolist())
 
