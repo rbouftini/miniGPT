@@ -1,5 +1,5 @@
-from datasets import load_dataset
 import pickle
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -7,6 +7,7 @@ from model import MiniGPTConfig, MiniGPT
 
 torch.manual_seed(1337)
 
+dataset = "darija_stories.txt"
 context_length = 512
 batch_size = 64
 n_embed = 384  #Number of embedding dimensions
@@ -18,9 +19,9 @@ max_iters = 5001
 learning_rate = 1e-4
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-dataset = load_dataset("alielfilali01/Darija-Stories-Dataset", split="train")
-
-text = ''.join([text for text in dataset["Text"]])
+data_dir = os.path.join("data", dataset)
+with open(data_dir, "r", encoding="utf-8") as f:
+  text = f.read()
 
 #Building the vocabulary
 vocab = sorted(list(set(text)))
@@ -47,6 +48,8 @@ data = torch.tensor(encode(text), dtype= torch.long)
 n = int(0.9 * len(data))
 train_data = data[:n]
 val_data = data[n:]
+print(f"Training data has: {len(train_data)} tokens")
+print(f"Validation data has: {len(val_data)} tokens")
 
 def get_batch(split):
   data = train_data if split == "train" else val_data
