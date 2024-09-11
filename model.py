@@ -30,7 +30,7 @@ class Head(nn.Module):
     q = self.query_head(x)
     k = self.key_head(x)
     v = self.vector_head(x)
-    attention = q @ torch.transpose(k, -2, -1) * C**-0.5
+    attention = q @ torch.transpose(k, -2, -1) * (k.shape[-1]**-0.5)
     attention = torch.masked_fill(attention, self.tril[:T,:T]==0, float('-inf') )
     attention = F.softmax(attention, dim=-1)
     attention = self.dropout(attention)
