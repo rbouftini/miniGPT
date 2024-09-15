@@ -82,8 +82,19 @@ class MiniGPT(nn.Module):
     self.pos_embedding_table = nn.Embedding(config.context_length,config.n_embed)
     self.blocks = nn.Sequential(*[Block(config)for _ in range(config.n_layers)])
     self.ln = nn.LayerNorm(config.n_embed)
-    self.lm_head = nn.Linear(config.n_embed, config.vocab_size)
+    self.lm_head = nn.Linear(config.n_embed, config.vocab_size, bias=False)
     self.config = config
+    self.apply(self._init_weights)
+
+  def _init_weights(self, module):
+    if isinstance(module, nn.Linear):
+      module.weight.data.normal_(mean=0.0, std=0.05)
+      if module.bias is not None:
+        module.bias.data.zero_()
+    
+    elif isinstance(module, nn.Embedding):
+      module.weight.data.normal_(mean=0.0, std=0.05)
+
 
   def forward(self, idx, targets=None):
     #idx and targets are both (B,T) tensors
