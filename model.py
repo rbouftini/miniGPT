@@ -7,7 +7,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 @dataclass
 class MiniGPTConfig():
-    vocab_size : int = 379
+    vocab_size : int = 512
     context_length : int = 512
     n_embed : int = 384  #Number of embedding dimensions
     n_layers : int = 6
