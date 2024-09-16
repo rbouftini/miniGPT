@@ -22,7 +22,6 @@ class Head(nn.Module):
     self.query_head = nn.Linear(config.n_embed,head_dimension, bias=False)
     self.key_head = nn.Linear(config.n_embed, head_dimension, bias=False)
     self.vector_head = nn.Linear(config.n_embed, head_dimension, bias=False)
-    self.register_buffer('tril', torch.tril(torch.ones(config.context_length, config.context_length)))
     self.dropout= nn.Dropout(config.dropout)
 
   def forward(self,x):
@@ -36,9 +35,8 @@ class Head(nn.Module):
     attention = F.softmax(attention, dim=-1)
     """
     #Flash Attention
-    attention = F.scaled_dot_product_attention(q, k, v, is_causal=True)
-    attention = self.dropout(attention)
-    out = attention @ v
+    out = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+    out  = self.dropout(out)
     return out
 
 class MultiHeadAttention(nn.Module):
