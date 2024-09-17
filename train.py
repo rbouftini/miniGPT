@@ -5,25 +5,26 @@ import torch.nn as nn
 import torch.nn.functional as F
 from model import MiniGPTConfig, MiniGPT
 import math
+import time
 
 torch.manual_seed(1337)
 
 dataset = "darija_stories.txt"
 context_length = 512
-batch_size = 64
+batch_size = 84
 n_embed = 384  #Number of embedding dimensions
 n_layers = 8
 n_heads = 8
 dropout = 0.2
 eval_iter = 20
-max_iters = 5001
-warmup_steps = 500
+max_iters = 8001
+warmup_steps = 1000
 max_lr = 3e-4
 min_lr = 3e-5
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 def get_lr(it):
-    # 1) Linear warmup for warmup_iters steps
+    # Linear warmup for warmup_iters steps
     if it < warmup_steps:
         return max_lr * (it+1) / warmup_steps
     else:
@@ -94,7 +95,8 @@ def get_validation_loss():
   model.train()
   return total_loss
 
-import time
+checkpoints_dir = "checkpoints"
+os.makedirs(checkpoints_dir, exist_ok=True)
 
 for step in range(max_iters):
     step_start_time = time.perf_counter()
@@ -114,10 +116,18 @@ for step in range(max_iters):
     scaler.update()
     torch.cuda.synchronize()
     step_end_time = time.perf_counter()
-    step_time = step_end_time - step_start_time 
+    step_time = step_end_time - step_start_time
     # Print step time and losses periodically
-    if step % 20 == 0:
+    if step % 100 == 0:
         validation_loss = get_validation_loss()
         print(f"step {step}, loss: {validation_loss:.4f}, lr: {lr:.6e}, time: {step_time:.4f} seconds")
-
-torch.save(model.state_dict(), 'checkpoint.pth')
+    # Saving checkpoint
+    if step > 0 and step % 1000 == 0 :
+      checkpoint_path = os.path.join(checkpoints_dir, f"step_{step}.pt")
+      checkpoint = {
+          'model': model.state_dict(),
+          'optimizer_state_dict': optimizer.state_dict(),
+          'step': step,
+          'val_loss': validation_loss
+        }
+      torch.save(checkpoint, checkpoint_path)
