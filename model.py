@@ -10,8 +10,8 @@ class MiniGPTConfig():
     vocab_size : int = 512
     context_length : int = 512
     n_embed : int = 384  #Number of embedding dimensions
-    n_layers : int = 6
-    n_heads : int = 6
+    n_layers : int = 8
+    n_heads : int = 8
     dropout : float = 0.2
   
 
@@ -29,11 +29,6 @@ class Head(nn.Module):
     q = self.query_head(x)
     k = self.key_head(x)
     v = self.vector_head(x)
-    """
-    attention = q @ torch.transpose(k, -2, -1) * (k.shape[-1]**-0.5)
-    attention = torch.masked_fill(attention, self.tril[:T,:T]==0, float('-inf') )
-    attention = F.softmax(attention, dim=-1)
-    """
     #Flash Attention
     out = F.scaled_dot_product_attention(q, k, v, is_causal=True)
     out  = self.dropout(out)
