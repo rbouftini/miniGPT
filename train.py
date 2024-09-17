@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from model import MiniGPTConfig, MiniGPT
+import math
 
 torch.manual_seed(1337)
 
@@ -11,13 +12,27 @@ dataset = "darija_stories.txt"
 context_length = 512
 batch_size = 64
 n_embed = 384  #Number of embedding dimensions
-n_layers = 6
-n_heads = 6
+n_layers = 8
+n_heads = 8
 dropout = 0.2
-eval_iter = 200
+eval_iter = 20
 max_iters = 5001
-learning_rate = 1e-4
+warmup_steps = 500
+max_lr = 3e-4
+min_lr = 3e-5
 device = "cuda" if torch.cuda.is_available() else "cpu"
+
+def get_lr(it):
+    # 1) Linear warmup for warmup_iters steps
+    if it < warmup_steps:
+        return max_lr * (it+1) / warmup_steps
+    else:
+      # Cosine decay down to min learning rate
+      decay_ratio = (it - warmup_steps) / (max_iters - warmup_steps)
+      assert 0 <= decay_ratio <= 1
+      coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff starts at 1 and goes to 0
+      return min_lr + coeff * (max_lr - min_lr)
+
 
 data_dir = os.path.join("data", dataset)
 with open(data_dir, "r", encoding="utf-8") as f:
@@ -25,7 +40,7 @@ with open(data_dir, "r", encoding="utf-8") as f:
 
 #Building the vocabulary
 vocab = sorted(list(set(text)))
-vocab_size = len(vocab)
+vocab_size = 512
 
 model_parameters = dict( vocab_size = vocab_size, context_length = context_length, n_embed = n_embed, n_layers = n_layers,
     n_heads = n_heads, dropout = dropout)
@@ -61,33 +76,48 @@ def get_batch(split):
 
 config = MiniGPTConfig(**model_parameters)
 model = MiniGPT(config).to(device)
+model = torch.compile(model)
 
-optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate) 
+optimizer = torch.optim.AdamW(model.parameters(), betas=(0.9,0.95), eps=1e-8, fused=True)
+scaler = torch.amp.GradScaler(device='cuda')
 
 @torch.no_grad()
-def estimate_loss():
-  out = {}
+def get_validation_loss():
   model.eval()
-  for split in ["train", "val"]:
-    losses = torch.zeros(eval_iter)
-    for iter in range(eval_iter):
-      xb, yb = get_batch(split)
-      logits, loss = model(xb,yb)
-      losses[iter] = loss.item()
-    out[split] = losses.mean()
+  total_loss = 0.0
+  for iter in range(eval_iter):
+    xb, yb = get_batch("val")
+    with torch.autocast(device_type=device, dtype=torch.float16):
+      _ , loss = model(xb,yb)
+    total_loss += loss.item()
+  total_loss /= eval_iter
   model.train()
-  return out
+  return total_loss
 
-for steps in range(max_iters):
-  xb, yb = get_batch("train")
-  if steps % eval_iter ==0:
-    losses = estimate_loss()
-    print(f"step {steps}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
-  logits, loss = model(xb,yb)
-  # Zerowing out gradients from previous step
-  optimizer.zero_grad(set_to_none=True)
-  loss.backward()
-  optimizer.step()
+import time
+
+for step in range(max_iters):
+    step_start_time = time.perf_counter()
+    xb, yb = get_batch("train")
+    with torch.autocast(device_type=device, dtype=torch.float16):
+        logits, loss = model(xb, yb)
+    lr = get_lr(step)
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+    # Zeroing out gradients from the previous step
+    optimizer.zero_grad(set_to_none=True)
+    scaler.scale(loss).backward()
+    # Gradient clipping
+    scaler.unscale_(optimizer)
+    nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+    scaler.step(optimizer)
+    scaler.update()
+    torch.cuda.synchronize()
+    step_end_time = time.perf_counter()
+    step_time = step_end_time - step_start_time 
+    # Print step time and losses periodically
+    if step % 20 == 0:
+        validation_loss = get_validation_loss()
+        print(f"step {step}, loss: {validation_loss:.4f}, lr: {lr:.6e}, time: {step_time:.4f} seconds")
 
 torch.save(model.state_dict(), 'checkpoint.pth')
-
