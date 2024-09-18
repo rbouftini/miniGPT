@@ -1,4 +1,4 @@
-import torch 
+import torch
 import pickle
 from model import MiniGPTConfig, MiniGPT
 
@@ -15,11 +15,14 @@ decode = lambda l: ''.join([itos[i] for i in l])
 config = MiniGPTConfig()
 model = MiniGPT(config).to(device)
 
-model.load_state_dict(torch.load("checkpoint.pth", map_location=device, weights_only=True))
+model_dict = torch.load("checkpoints/step_8000.pt", map_location=torch.device('cpu'))
+def remove_prefix(state_dict):
+    return {(k[10:] if k.startswith("_orig_mod.") else k): v for k, v in state_dict.items()}
+
+model_dict = remove_prefix(model_dict["model"])
+model.load_state_dict(model_dict)
 
 model.eval()
-text = decode(model.generate(torch.zeros((1,1), dtype=torch.long, device=device), max_new_tokens=10000)[0].tolist())
-
-with open("generation.txt", "w") as f:
-    f.write(text)
+tokens = encode("هي قصة")
+text = decode(model.generate(torch.tensor(tokens, dtype=torch.long ,device=device).unsqueeze(0), max_new_tokens=1000)[0].tolist())
 
