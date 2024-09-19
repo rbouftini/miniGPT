@@ -17,10 +17,11 @@ n_layers = 8
 n_heads = 8
 dropout = 0.2
 eval_iter = 20
-max_iters = 8001
+max_iters = 10000
 warmup_steps = 1000
 max_lr = 3e-4
 min_lr = 3e-5
+resume_training = False
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 def get_lr(it):
@@ -82,6 +83,17 @@ model = torch.compile(model)
 optimizer = torch.optim.AdamW(model.parameters(), betas=(0.9,0.95), eps=1e-8, fused=True)
 scaler = torch.amp.GradScaler(device='cuda')
 
+step = 0
+checkpoints_dir = "checkpoints"
+os.makedirs(checkpoints_dir, exist_ok=True)
+if resume_training == True:
+   checkpoint_dir = os.path.join(checkpoints_dir,"step_8000.pt")
+   state_dict = torch.load(checkpoint_dir, map_location= device)
+   model.load_state_dict(state_dict["model"])
+   optimizer.load_state_dict(state_dict["optimizer_state_dict"])
+   loss = state_dict["val_loss"]
+   step = state_dict["step"]
+
 @torch.no_grad()
 def get_validation_loss():
   model.eval()
@@ -95,11 +107,8 @@ def get_validation_loss():
   model.train()
   return total_loss
 
-checkpoints_dir = "checkpoints"
-os.makedirs(checkpoints_dir, exist_ok=True)
-
-for step in range(max_iters):
-    step_start_time = time.perf_counter()
+while True:
+    start_time = time.time()
     xb, yb = get_batch("train")
     with torch.autocast(device_type=device, dtype=torch.float16):
         logits, loss = model(xb, yb)
@@ -115,12 +124,12 @@ for step in range(max_iters):
     scaler.step(optimizer)
     scaler.update()
     torch.cuda.synchronize()
-    step_end_time = time.perf_counter()
-    step_time = step_end_time - step_start_time
+    end_time = time.time()
+    time_taken = end_time - start_time
     # Print step time and losses periodically
     if step % 100 == 0:
         validation_loss = get_validation_loss()
-        print(f"step {step}, loss: {validation_loss:.4f}, lr: {lr:.6e}, time: {step_time:.4f} seconds")
+        print(f"step {step}, loss: {validation_loss:.4f}, lr: {lr:.6e}, time: {time_taken:.4f} seconds")
     # Saving checkpoint
     if step > 0 and step % 1000 == 0 :
       checkpoint_path = os.path.join(checkpoints_dir, f"step_{step}.pt")
@@ -131,3 +140,7 @@ for step in range(max_iters):
           'val_loss': validation_loss
         }
       torch.save(checkpoint, checkpoint_path)
+    if step == max_iters:
+       break
+    else:
+       step += 1
