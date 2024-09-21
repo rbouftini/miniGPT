@@ -13,7 +13,8 @@ split_dataset = dataset.train_test_split(test_size=0.01, seed=2357, shuffle=Fals
 split_dataset['val'] = split_dataset.pop('test')
 
 # Load the tokenizer from the JSON file
-tokenizer = Tokenizer.from_file("arabic_causal_lm_tokenizer.json")
+tokenizer_path = os.path.join("..","tokenizer.json")
+tokenizer = Tokenizer.from_file()
 
 # Function to remove emojis from text
 def remove_emojis(text):
