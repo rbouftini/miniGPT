@@ -7,14 +7,14 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 @dataclass
 class MiniGPTConfig():
-    vocab_size = 16384 
+    vocab_size : int = 16384
     context_length : int = 512
     n_embed : int = 384  #Number of embedding dimensions
     n_layers : int = 8
     n_heads : int = 8
     dropout : float = 0.2
-  
-  
+
+    
 class Head(nn.Module):
 
   def __init__(self,head_dimension, config):
@@ -88,7 +88,7 @@ class MiniGPT(nn.Module):
       module.weight.data.normal_(mean=0.0, std=0.05)
       if module.bias is not None:
         module.bias.data.zero_()
-    
+
     elif isinstance(module, nn.Embedding):
       module.weight.data.normal_(mean=0.0, std=0.05)
 
@@ -112,7 +112,7 @@ class MiniGPT(nn.Module):
       targets = targets.view(B*T)
       loss = F.cross_entropy(logits, targets)
       return logits, loss
-    
+
   def generate(self, idx, max_new_tokens):
   # idx is (B,T) which is the current context we have in some batches
     for _ in range(max_new_tokens):
