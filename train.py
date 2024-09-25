@@ -3,26 +3,25 @@ import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from model import MiniGPTConfig, MiniGPT
 import math
 import time
 import numpy as np
+from model import MiniGPTConfig, MiniGPT
 
 torch.manual_seed(1337)
 
-dataset = "darija_stories.txt"
 context_length = 512
-batch_size = 84
+batch_size = 48
 n_embed = 384  #Number of embedding dimensions
 n_layers = 8
 n_heads = 8
 dropout = 0.2
 eval_iter = 20
-max_iters = 10000
+max_iters = 20000
 warmup_steps = 1000
 max_lr = 3e-4
 min_lr = 3e-5
-vocab_size = 16384 
+vocab_size = 16384
 resume_training = False
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -46,10 +45,14 @@ def get_batch(split):
   else:
         data = np.memmap('val.bin', dtype=np.uint16, mode='r')
   ix = torch.randint(len(data)- context_length, (batch_size,))
-  x = torch.stack([data[i:i+context_length]for i in ix])
-  y = torch.stack([data[i+1:i+1+context_length]for i in ix])
-  x,y = x.to(device), y.to(device)
-  return x,y
+  x = torch.stack([torch.from_numpy((data[i:i+context_length]).astype(np.int64)) for i in ix])
+  y = torch.stack([torch.from_numpy((data[i+1:i+1+context_length]).astype(np.int64)) for i in ix])
+  if device == 'cuda':
+        # pin arrays x,y to be loaded in main memory, and move then to GPU asynchronously
+        x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
+  else:
+        x, y = x.to(device), y.to(device)
+  return x, y
 
 config = MiniGPTConfig(**model_parameters)
 model = MiniGPT(config).to(device)
@@ -104,7 +107,7 @@ while True:
     # Print step time and losses periodically
     if step % 100 == 0:
         validation_loss = get_validation_loss()
-        print(f"step {step}, loss: {validation_loss:.4f}, lr: {lr:.6e}, time: {time_taken:.4f} seconds")
+        print(f"step {step}, validation loss: {validation_loss:.4f}, lr: {lr:.6e}, time: {time_taken:.4f} seconds")
     # Saving checkpoint
     if step > 0 and step % 1000 == 0 :
       checkpoint_path = os.path.join(checkpoints_dir, f"step_{step}.pt")
