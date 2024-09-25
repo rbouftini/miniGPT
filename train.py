@@ -85,11 +85,13 @@ def get_validation_loss():
   model.train()
   return total_loss
 
+train_loss = 0
 while True:
     start_time = time.time()
     xb, yb = get_batch("train")
     with torch.autocast(device_type=device, dtype=torch.float16):
         logits, loss = model(xb, yb)
+    train_loss += loss
     lr = get_lr(step)
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
@@ -107,7 +109,8 @@ while True:
     # Print step time and losses periodically
     if step % 100 == 0:
         validation_loss = get_validation_loss()
-        print(f"step {step}, validation loss: {validation_loss:.4f}, lr: {lr:.6e}, time: {time_taken:.4f} seconds")
+        print(f"step {step}, train loss:{train_loss/100:.4f},  validation loss: {validation_loss:.4f}, lr: {lr:.6e}, time: {time_taken:.4f} seconds")
+        train_loss = 0
     # Saving checkpoint
     if step > 0 and step % 1000 == 0 :
       checkpoint_path = os.path.join(checkpoints_dir, f"step_{step}.pt")
