@@ -14,7 +14,7 @@ class MiniGPTConfig():
     n_heads : int = 8
     dropout : float = 0.2
 
-    
+
 class Head(nn.Module):
 
   def __init__(self,head_dimension, config):
@@ -125,3 +125,16 @@ class MiniGPT(nn.Module):
       next_token = torch.multinomial(probs,num_samples=1)    #multiomial generates an index from the probability distribution
       idx = torch.cat((idx,next_token), dim = 1)
     return idx
+  
+  def configure_optimizer(self, weight_decay, learning_rate, betas):
+        param_dict = {pn: p for pn, p in self.named_parameters()}
+        param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
+        decay_params = [p for n, p in param_dict.items() if p.dim() >= 2]
+        nodecay_params = [p for n, p in param_dict.items() if p.dim() < 2]
+        optim_groups = [
+            {'params': decay_params, 'weight_decay': weight_decay},
+            {'params': nodecay_params, 'weight_decay': 0.0}
+        ]
+        optimizer = torch.optim.AdamW(optim_groups,learning_rate=learning_rate, betas=betas, eps=1e-8, fused= True)
+
+        return optimizer
