@@ -135,6 +135,6 @@ class MiniGPT(nn.Module):
             {'params': decay_params, 'weight_decay': weight_decay},
             {'params': nodecay_params, 'weight_decay': 0.0}
         ]
-        optimizer = torch.optim.AdamW(optim_groups,learning_rate=learning_rate, betas=betas, eps=1e-8, fused= True)
+        optimizer = torch.optim.AdamW(optim_groups,lr=learning_rate, betas=betas, eps=1e-8, fused= True)
 
         return optimizer
