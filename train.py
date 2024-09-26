@@ -19,11 +19,25 @@ dropout = 0.2
 eval_iter = 20
 max_iters = 20000
 warmup_steps = 1000
-max_lr = 3e-4
-min_lr = 3e-5
+max_lr = 6e-4
+min_lr = 6e-5
 vocab_size = 16384
+weight_decay = 0.1
 resume_training = False
 device = "cuda" if torch.cuda.is_available() else "cpu"
+
+def configure_optimizer(self, weight_decay, learning_rate, betas):
+        param_dict = {pn: p for pn, p in self.named_parameters()}
+        param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
+        decay_params = [p for n, p in param_dict.items() if p.dim() >= 2]
+        nodecay_params = [p for n, p in param_dict.items() if p.dim() < 2]
+        optim_groups = [
+            {'params': decay_params, 'weight_decay': weight_decay},
+            {'params': nodecay_params, 'weight_decay': 0.0}
+        ]
+        optimizer = torch.optim.AdamW(optim_groups,learning_rate=learning_rate, betas=betas, eps=1e-8, fused= True)
+
+        return optimizer
 
 def get_lr(it):
     # Linear warmup for warmup_iters steps
@@ -58,8 +72,8 @@ config = MiniGPTConfig(**model_parameters)
 model = MiniGPT(config).to(device)
 model = torch.compile(model)
 
-optimizer = torch.optim.AdamW(model.parameters(), betas=(0.9,0.95), eps=1e-8, fused=True)
-scaler = torch.amp.GradScaler(device='cuda')
+optimizer = configure_optimizer(weight_decay, learning_rate=max_lr, betas=(0.9,0.95))
+scaler = torch.amp.GradScaler(device=device)
 
 step = 0
 checkpoints_dir = "checkpoints"
