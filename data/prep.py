@@ -9,7 +9,7 @@ from tqdm import tqdm
 dataset = load_dataset("M-A-D/Mixed-Arabic-Datasets-Repo", "Ara--Wikipedia", split="train")
 
 # Split the dataset into training and validation sets
-split_dataset = dataset.train_test_split(test_size=0.01, seed=2357, shuffle=False)
+split_dataset = dataset.train_test_split(test_size=0.003, seed=2357, shuffle=False)
 split_dataset['val'] = split_dataset.pop('test')
 
 # Load the tokenizer from the JSON file
@@ -17,21 +17,22 @@ tokenizer = AutoTokenizer.from_pretrained("tokenizer")
 
 # Function to process each example
 def process(example):
-    tokens_ids = tokenizer.encode(example)
-    tokens_ids.append(tokens_ids.eos_token_id)
+    tokens_ids = tokenizer.encode(example["text"])
+    tokens_ids.append(tokenizer.eos_token_id)
     return {"token_ids": tokens_ids, "len": len(tokens_ids)}
 
 # Process the dataset
 new_dataset = split_dataset.map(
     process,
     num_proc=8,
-    desc="Tokenizing and cleaning the dataset",
+    desc="Tokenizing the dataset",
     remove_columns=["id", "url", "title", "text"]
 )
 
 # Save the token IDs using memory mapping
 for split, dset in new_dataset.items():
     arr_len = np.sum(dset['len'], dtype=np.uint64)
+    print(f"Number of tokens in {split}: ", arr_len)
     filename = f'{split}.bin'
     dtype = np.uint16  
     arr = np.memmap(filename, dtype=dtype, mode='w+', shape=(arr_len,))
