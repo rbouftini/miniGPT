@@ -1,2 +1,8 @@
 torch==2.4.0
 datasets==2.21.0
+transformers==4.45.1
+triton==3.0.0
+numpy==1.26.4
+tqdm==4.66.5
+arabic-reshaper==3.0.0
+python-bidi==0.6.0
