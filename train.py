@@ -11,19 +11,21 @@ from model import MiniGPTConfig, MiniGPT
 torch.manual_seed(1337)
 
 context_length = 512
-batch_size = 48
-n_embed = 384  #Number of embedding dimensions
+batch_size = 32
+n_embed = 768  #Number of embedding dimensions
 n_layers = 8
 n_heads = 8
 dropout = 0.05
 eval_iter = 20
-max_iters = 20000
-warmup_steps = 1000
+max_iters = 2000
+warmup_steps = 20
 max_lr = 6e-4
 min_lr = 6e-5
-vocab_size = 16384
+vocab_size = 32209
 weight_decay = 0.1
 resume_training = False
+total_batch_size = 212992    
+grad_accum_steps = total_batch_size // (context_length * batch_size)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 def get_lr(it):
@@ -87,34 +89,38 @@ def get_validation_loss():
   model.train()
   return total_loss
 
-train_loss = 0
+train_loss = 0.0
 while True:
     start_time = time.time()
-    xb, yb = get_batch("train")
-    with torch.autocast(device_type=device, dtype=torch.float16):
-        logits, loss = model(xb, yb)
-    train_loss += loss
+    for small_grad_step in range(grad_accum_steps):
+        xb, yb = get_batch("train")
+        with torch.autocast(device_type=device, dtype=torch.float16):
+          logits, loss = model(xb, yb)
+        loss = loss / grad_accum_steps
+        scaler.scale(loss).backward() 
+    train_loss = train_loss + loss.item()*grad_accum_steps
+    scaler.unscale_(optimizer)
     lr = get_lr(step)
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
-    # Zeroing out gradients from the previous step
-    optimizer.zero_grad(set_to_none=True)
-    scaler.scale(loss).backward()
-    # Gradient clipping
-    scaler.unscale_(optimizer)
+    # Gradient clipping    
     nn.utils.clip_grad_norm_(model.parameters(), 1.0)
     scaler.step(optimizer)
     scaler.update()
+
+    # Zeroing out gradients from the previous step
+    optimizer.zero_grad(set_to_none=True)
     torch.cuda.synchronize()
     end_time = time.time()
     time_taken = end_time - start_time
+
     # Print step time and losses periodically
-    if step % 100 == 0:
+    if step % 50 == 0:
         validation_loss = get_validation_loss()
-        print(f"step {step}, train loss:{train_loss/100:.4f},  validation loss: {validation_loss:.4f}, lr: {lr:.6e}, time: {time_taken:.4f} seconds")
+        print(f"step {step}, train loss:{train_loss*grad_accum_steps/50:.4f},  validation loss: {validation_loss:.4f}, lr: {lr:.6e}, time: {time_taken:.4f} seconds")
         train_loss = 0
     # Saving checkpoint
-    if step > 0 and step % 1000 == 0 :
+    if step > 0 and step % 200 == 0 :
       checkpoint_path = os.path.join(checkpoints_dir, f"step_{step}.pt")
       checkpoint = {
           'model': model.state_dict(),
