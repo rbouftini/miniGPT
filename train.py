@@ -24,14 +24,17 @@ min_lr = 6e-5
 vocab_size = 32209
 weight_decay = 0.1
 resume_training = False
-total_batch_size = 212992    
+total_batch_size = 212992
 grad_accum_steps = total_batch_size // (context_length * batch_size)
 device = "cuda" if torch.cuda.is_available() else "cpu"
+max_steps = 2000
 
 def get_lr(it):
     # Linear warmup for warmup_iters steps
     if it < warmup_steps:
         return max_lr * (it+1) / warmup_steps
+    elif  it > max_steps:
+        return min_lr
     else:
       # Cosine decay down to min learning rate
       decay_ratio = (it - warmup_steps) / (max_iters - warmup_steps)
@@ -69,7 +72,7 @@ step = 0
 checkpoints_dir = "checkpoints"
 os.makedirs(checkpoints_dir, exist_ok=True)
 if resume_training == True:
-   checkpoint_dir = os.path.join(checkpoints_dir,"step_8000.pt")
+   checkpoint_dir = os.path.join(checkpoints_dir,"step_2000.pt")
    state_dict = torch.load(checkpoint_dir, map_location= device)
    model.load_state_dict(state_dict["model"])
    optimizer.load_state_dict(state_dict["optimizer_state_dict"])
@@ -117,10 +120,10 @@ while True:
     # Print step time and losses periodically
     if step % 50 == 0:
         validation_loss = get_validation_loss()
-        print(f"step {step}, train loss:{train_loss*grad_accum_steps/50:.4f},  validation loss: {validation_loss:.4f}, lr: {lr:.6e}, time: {time_taken:.4f} seconds")
+        print(f"step {step}, train loss:{train_loss/50:.4f},  validation loss: {validation_loss:.4f}, lr: {lr:.6e}, time: {time_taken:.4f} seconds")
         train_loss = 0
     # Saving checkpoint
-    if step > 0 and step % 200 == 0 :
+    if step > 0 and step % 500 == 0 :
       checkpoint_path = os.path.join(checkpoints_dir, f"step_{step}.pt")
       checkpoint = {
           'model': model.state_dict(),
