@@ -10,7 +10,7 @@ tokenizer = AutoTokenizer.from_pretrained("tokenizer")
 config = MiniGPTConfig()
 model = MiniGPT(config).to(device)
 
-model_dict = torch.load("checkpoints/step_4000.pt", map_location=device)
+model_dict = torch.load("checkpoints/step_4000.pt", map_location=device, weights_only=True)
 def remove_prefix(state_dict):
     return {(k[10:] if k.startswith("_orig_mod.") else k): v for k, v in state_dict.items()}
 
