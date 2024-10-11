@@ -4,5 +4,4 @@ transformers==4.45.1
 triton==3.0.0
 numpy==1.26.4
 tqdm==4.66.5
-arabic-reshaper==3.0.0
-python-bidi==0.6.0
+flask==3.0.3
