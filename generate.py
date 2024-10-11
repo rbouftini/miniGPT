@@ -18,5 +18,19 @@ model_dict = remove_prefix(model_dict["model"])
 model.load_state_dict(model_dict)
 
 model.eval()
-example = "مدينة سان فرانسيسكو تقع"
-text = tokenizer.decode(model.generate(torch.tensor(tokenizer.encode(example), dtype=torch.long ,device=device).unsqueeze(0), max_new_tokens=100)[0].tolist())
+max_tokens = 100
+
+def generate_completion(prompt):
+    tokens_ids = torch.tensor(tokenizer.encode(prompt), dtype=torch.long, device=device).unsqueeze(0)
+
+    for token in prompt:
+        yield token
+
+    for _ in range(max_tokens):
+        new_token_id = model.generate(tokens_ids, max_new_tokens=1)[:,-1].unsqueeze(0)
+        tokens_ids = torch.cat((tokens_ids, new_token_id), dim=-1)
+        output = tokenizer.decode(new_token_id[0], skip_special_tokens=True)
+        yield output
+
+        if new_token_id.item() == tokenizer.eos_token_id:
+            break
