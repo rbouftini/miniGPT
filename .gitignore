@@ -1,5 +1,6 @@
 .vscode
 .venv
+.env
 *.bin
 __pycache__
 checkpoints
