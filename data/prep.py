@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 HF_token = os.getenv('HF_TOKEN')
 
-dataset = load_dataset('lightonai/ArabicWeb24', data_files='ArabicWeb24/**/*.arrow', split='train', token=HF_token, streaming=True)
+dataset = load_dataset('lightonai/ArabicWeb24', data_files='ArabicWeb24/**/*.arrow', split='train', token=HF_token)
 
 # Split the dataset into training and validation sets
 split_dataset = dataset.train_test_split(test_size=0.0001, seed=2357, shuffle=True)
@@ -21,8 +21,8 @@ tokenizer = AutoTokenizer.from_pretrained("tokenizer")
 
 # Function to process each example
 def process(example):
-    tokens_ids = tokenizer.encode(example["text"])
-    tokens_ids.append(tokenizer.eos_token_id)
+    tokens_ids = [tokenizer.eos_token_id]
+    tokens_ids.extend(tokenizer.encode(example["text"]))
     return {"token_ids": tokens_ids, "len": len(tokens_ids)}
 
 # Process the dataset
@@ -41,7 +41,7 @@ for split, dset in new_dataset.items():
     dtype = np.uint16  
     arr = np.memmap(filename, dtype=dtype, mode='w+', shape=(arr_len,))
 
-    total_batches = 60
+    total_batches = 1024
     idx = 0
 
     for batch_idx in tqdm(range(total_batches), desc=f'Writing {filename}'):
