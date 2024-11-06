@@ -4,12 +4,16 @@ import re
 from datasets import load_dataset
 from transformers import AutoTokenizer
 from tqdm import tqdm
+from dotenv import load_dotenv
 
-# Load the dataset
-dataset = load_dataset("M-A-D/Mixed-Arabic-Datasets-Repo", "Ara--Wikipedia", split="train")
+#Load HuggingFace API key
+load_dotenv()
+HF_token = os.getenv('HF_TOKEN')
+
+dataset = load_dataset('lightonai/ArabicWeb24', data_files='ArabicWeb24/**/*.arrow', split='train', token=HF_token, streaming=True)
 
 # Split the dataset into training and validation sets
-split_dataset = dataset.train_test_split(test_size=0.003, seed=2357, shuffle=False)
+split_dataset = dataset.train_test_split(test_size=0.0001, seed=2357, shuffle=True)
 split_dataset['val'] = split_dataset.pop('test')
 
 # Load the tokenizer from the JSON file
@@ -26,7 +30,7 @@ new_dataset = split_dataset.map(
     process,
     num_proc=8,
     desc="Tokenizing the dataset",
-    remove_columns=["id", "url", "title", "text"]
+    remove_columns=["data_id", "metadata"]
 )
 
 # Save the token IDs using memory mapping
