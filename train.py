@@ -70,6 +70,7 @@ scaler = torch.amp.GradScaler(device=device)
 step = 0
 checkpoints_dir = "checkpoints"
 os.makedirs(checkpoints_dir, exist_ok=True)
+
 if resume_training == True:
    checkpoint_dir = os.path.join(checkpoints_dir,"step_2000.pt")
    state_dict = torch.load(checkpoint_dir, map_location= device)
@@ -91,8 +92,9 @@ def get_validation_loss():
   model.train()
   return total_loss
 
-train_loss = 0.0
+
 while True:
+    train_loss = 0.0
     start_time = time.time()
     for small_grad_step in range(grad_accum_steps):
         xb, yb = get_batch("train")
@@ -100,12 +102,15 @@ while True:
           logits, loss = model(xb, yb)
         loss = loss / grad_accum_steps
         scaler.scale(loss).backward() 
-    train_loss = train_loss + loss.item()*grad_accum_steps
-    scaler.unscale_(optimizer)
+        train_loss += loss.detach()
+
+    # Get new Learning rate    
     lr = get_lr(step)
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
-    # Gradient clipping    
+
+    # Gradient clipping  
+    scaler.unscale_(optimizer)  
     nn.utils.clip_grad_norm_(model.parameters(), 1.0)
     scaler.step(optimizer)
     scaler.update()
@@ -119,8 +124,8 @@ while True:
     # Print step time and losses periodically
     if step % 50 == 0:
         validation_loss = get_validation_loss()
-        print(f"step {step}, train loss:{train_loss/50:.4f},  validation loss: {validation_loss:.4f}, lr: {lr:.6e}, time: {time_taken:.4f} seconds")
-        train_loss = 0
+        print(f"step {step}, train loss:{train_loss:.4f},  validation loss: {validation_loss:.4f}, lr: {lr:.6e}, time: {time_taken:.4f} seconds")
+
     # Saving checkpoint
     if step > 0 and step % 500 == 0 :
       checkpoint_path = os.path.join(checkpoints_dir, f"step_{step}.pt")
@@ -131,6 +136,7 @@ while True:
           'val_loss': validation_loss
         }
       torch.save(checkpoint, checkpoint_path)
+
     if step == max_iters:
        break
     else:
