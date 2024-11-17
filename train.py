@@ -16,7 +16,8 @@ n_embed = 768  #Number of embedding dimensions
 n_layers = 8
 n_heads = 8
 eval_iter = 20
-max_iters = 2000
+max_iters = 2000  # For 1 epoch
+training_steps = max_iters * 4 # For training on 4 epochs
 warmup_steps = 20
 max_lr = 6e-4
 min_lr = 6e-5
@@ -28,18 +29,19 @@ grad_accum_steps = total_batch_size // (context_length * batch_size)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 max_steps = 2000
 
+# learning rate decay scheduler (cosine with warmup)
 def get_lr(it):
-    # Linear warmup for warmup_iters steps
+    # 1) linear warmup for warmup_iters steps
     if it < warmup_steps:
-        return max_lr * (it+1) / warmup_steps
-    elif  it > max_steps:
+        return max_lr * it / warmup_steps
+    # 2) if it > lr_decay_iters, return min learning rate
+    if it > max_iters:
         return min_lr
-    else:
-      # Cosine decay down to min learning rate
-      decay_ratio = (it - warmup_steps) / (max_iters - warmup_steps)
-      assert 0 <= decay_ratio <= 1
-      coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff starts at 1 and goes to 0
-      return min_lr + coeff * (max_lr - min_lr)
+    # 3) in between, use cosine decay down to min learning rate
+    decay_ratio = (it - warmup_steps) / (max_iters - warmup_steps)
+    assert 0 <= decay_ratio <= 1
+    coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff ranges 0..1
+    return min_lr + coeff * (max_lr - min_lr)
 
 model_parameters = dict( vocab_size = vocab_size, context_length = context_length, n_embed = n_embed, n_layers = n_layers,
     n_heads = n_heads)
@@ -152,7 +154,7 @@ while True:
         }
       torch.save(checkpoint, checkpoint_path)
 
-    if step == max_iters:
+    if step == training_steps:
        break
     else:
        step += 1
