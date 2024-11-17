@@ -15,7 +15,6 @@ batch_size = 32
 n_embed = 768  #Number of embedding dimensions
 n_layers = 8
 n_heads = 8
-dropout = 0.05
 eval_iter = 20
 max_iters = 2000
 warmup_steps = 20
@@ -43,7 +42,7 @@ def get_lr(it):
       return min_lr + coeff * (max_lr - min_lr)
 
 model_parameters = dict( vocab_size = vocab_size, context_length = context_length, n_embed = n_embed, n_layers = n_layers,
-    n_heads = n_heads, dropout = dropout)
+    n_heads = n_heads)
 
 def get_batch(split):
   if split == 'train':

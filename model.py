@@ -12,8 +12,6 @@ class MiniGPTConfig():
     n_embed : int = 768  #Number of embedding dimensions
     n_layers : int = 8
     n_heads : int = 8
-    dropout : float = 0.05
-
 
 class Head(nn.Module):
 
@@ -22,7 +20,6 @@ class Head(nn.Module):
     self.query_head = nn.Linear(config.n_embed,head_dimension, bias=False)
     self.key_head = nn.Linear(config.n_embed, head_dimension, bias=False)
     self.vector_head = nn.Linear(config.n_embed, head_dimension, bias=False)
-    self.dropout= nn.Dropout(config.dropout)
 
   def forward(self,x):
     B,T,C = x.shape
@@ -31,7 +28,6 @@ class Head(nn.Module):
     v = self.vector_head(x)
     #Flash Attention
     out = F.scaled_dot_product_attention(q, k, v, is_causal=True)
-    out  = self.dropout(out)
     return out
 
 class MultiHeadAttention(nn.Module):
@@ -39,21 +35,19 @@ class MultiHeadAttention(nn.Module):
     super().__init__()
     self.heads = nn.ModuleList([Head(head_size, config) for _ in range(config.n_heads)])
     self.proj = nn.Linear(config.n_embed, config.n_embed)
-    self.dropout = nn.Dropout(config.dropout)
 
   def forward(self, x):
     out = torch.cat([head(x) for head in self.heads], dim =-1)
-    out = self.dropout(self.proj(out))
+    out = self.proj(out)
     return out
 
 class FeedForward(nn.Module):
-  def __init__(self, n_embed, dropout):
+  def __init__(self, n_embed):
     super().__init__()
     self.net = nn.Sequential(
         nn.Linear(n_embed,4*n_embed),
         nn.ReLU(),
         nn.Linear(4*n_embed,n_embed),
-        nn.Dropout(dropout)
     )
   def forward(self,x):
     return self.net(x)
@@ -63,7 +57,7 @@ class Block(nn.Module):
     super().__init__()
     head_size = config.n_embed // config.n_heads
     self.ma_head = MultiHeadAttention(head_size, config)
-    self.ffwd = FeedForward(config.n_embed, config.dropout)
+    self.ffwd = FeedForward(config.n_embed)
     self.ln1 = nn.LayerNorm(config.n_embed)
     self.ln2 = nn.LayerNorm(config.n_embed)
 
