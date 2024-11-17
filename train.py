@@ -44,23 +44,38 @@ def get_lr(it):
 model_parameters = dict( vocab_size = vocab_size, context_length = context_length, n_embed = n_embed, n_layers = n_layers,
     n_heads = n_heads)
 
-def get_batch(split):
-  if split == 'train':
-        data = np.memmap('train.bin', dtype=np.uint16, mode='r')
-  else:
-        data = np.memmap('val.bin', dtype=np.uint16, mode='r')
-  ix = torch.randint(len(data)- context_length, (batch_size,))
-  x = torch.stack([torch.from_numpy((data[i:i+context_length]).astype(np.int64)) for i in ix])
-  y = torch.stack([torch.from_numpy((data[i+1:i+1+context_length]).astype(np.int64)) for i in ix])
-  if device == 'cuda':
-        # pin arrays x,y to be loaded in main memory, and move then to GPU asynchronously
-        x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
-  else:
-        x, y = x.to(device), y.to(device)
-  return x, y
+class DataLoader:
+    def __init__(self, file_name, batch_size, context_length):
+      self.data = np.memmap(file_name, dtype=np.uint16, mode='r+')
+      self.n_examples = len(self.data)
+      self.current = 0
+      self.batch_size = batch_size
+      self.context_length = context_length
+      self.full_context = self.batch_size * self.context_length
+      self.n_valid_sequences = (self.n_examples - 1) // self.full_context
+      self.indexes = np.arange(0, self.n_valid_sequences * self.full_context, self.full_context)
+
+    def shuffle(self):
+      np.random.shuffle(self.indexes)
+
+    def get_batch(self):
+      if self.current == self.n_valid_sequences:
+        self.current = 0
+        self.shuffle()
+
+      idx = self.indexes[self.current]
+      x = torch.from_numpy((self.data[idx: idx + self.full_context]).astype(np.int64)).view(-1,self.context_length)
+      y = torch.from_numpy((self.data[idx+1 : idx + self.full_context+1]).astype(np.int64)).view(-1,self.context_length)
+      self.current += 1
+
+      x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
+
+      return x,y
 
 config = MiniGPTConfig(**model_parameters)
 model = MiniGPT(config).to(device)
+train_loader = DataLoader("train.bin", batch_size, context_length)
+val_loader = DataLoader("val.bin", batch_size, context_length)
 
 optimizer = model.configure_optimizer(weight_decay, learning_rate=max_lr, betas=(0.9,0.95))
 
@@ -84,7 +99,7 @@ def get_validation_loss():
   model.eval()
   total_loss = 0.0
   for iter in range(eval_iter):
-    xb, yb = get_batch("val")
+    xb, yb = val_loader.get_batch("val")
     with torch.autocast(device_type=device, dtype=torch.float16):
       _ , loss = model(xb,yb)
     total_loss += loss.item()
@@ -97,7 +112,7 @@ while True:
     train_loss = 0.0
     start_time = time.time()
     for small_grad_step in range(grad_accum_steps):
-        xb, yb = get_batch("train")
+        xb, yb = train_loader.get_batch("train")
         with torch.autocast(device_type=device, dtype=torch.float16):
           logits, loss = model(xb, yb)
         loss = loss / grad_accum_steps
