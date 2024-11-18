@@ -13,31 +13,24 @@ class MiniGPTConfig():
     n_layers : int = 8
     n_heads : int = 8
 
-class Head(nn.Module):
-
-  def __init__(self,head_dimension, config):
-    super().__init__()
-    self.query_head = nn.Linear(config.n_embed,head_dimension, bias=False)
-    self.key_head = nn.Linear(config.n_embed, head_dimension, bias=False)
-    self.vector_head = nn.Linear(config.n_embed, head_dimension, bias=False)
-
-  def forward(self,x):
-    B,T,C = x.shape
-    q = self.query_head(x)
-    k = self.key_head(x)
-    v = self.vector_head(x)
-    #Flash Attention
-    out = F.scaled_dot_product_attention(q, k, v, is_causal=True)
-    return out
-
 class MultiHeadAttention(nn.Module):
-  def __init__(self,head_size, config):
+  def __init__(self, config):
     super().__init__()
-    self.heads = nn.ModuleList([Head(head_size, config) for _ in range(config.n_heads)])
-    self.proj = nn.Linear(config.n_embed, config.n_embed)
+    self.n_heads = config.n_heads
+    self.n_embed = config.n_embed
+    self.head_size = self.n_embed // self.n_heads
+    self.query_head = nn.Linear(self.n_embed, self.n_embed, bias= False)
+    self.key_head = nn.Linear(self.n_embed, self.n_embed, bias=False)
+    self.value_head = nn.Linear(self.n_embed, self.n_embed, bias= False)
+    self.proj = nn.Linear(self.n_embed, self.n_embed, bias=False)
 
   def forward(self, x):
-    out = torch.cat([head(x) for head in self.heads], dim =-1)
+    B,T,E = x.shape
+    q = self.query_head(x).view(B, T, self.n_heads, self.head_size)
+    k = self.key_head(x).view(B, T, self.n_heads, self.head_size)
+    v = self.value_head(x).view(B, T, self.n_heads, self.head_size)
+    out = F.scaled_dot_product_attention(q.transpose(1,2), k.transpose(1,2), v.transpose(1,2), is_causal=True)
+    out = out.transpose(1, 2).contiguous().view(B,T,E)
     out = self.proj(out)
     return out
 
@@ -55,8 +48,7 @@ class FeedForward(nn.Module):
 class Block(nn.Module):
   def __init__(self,config):
     super().__init__()
-    head_size = config.n_embed // config.n_heads
-    self.ma_head = MultiHeadAttention(head_size, config)
+    self.ma_head = MultiHeadAttention(config)
     self.ffwd = FeedForward(config.n_embed)
     self.ln1 = nn.LayerNorm(config.n_embed)
     self.ln2 = nn.LayerNorm(config.n_embed)
