@@ -13,6 +13,33 @@ class MiniGPTConfig():
     n_layers : int = 8
     n_heads : int = 8
 
+class RoPE(nn.Module):
+  def __init__(self, head_size, base=10000):
+    super().__init__()
+    thetas = base ** (- 2 *torch.arange(0, (head_size)//2).float() / head_size)
+    self.register_buffer("thetas", thetas)
+    self.context_length_cached = None
+    self.cos_cached = None
+    self.sin_cached = None
+
+  def forward(self, q):
+    context_length = q.shape[1]
+    dim = q.shape[3] // 2
+    if self.context_length_cached != context_length:
+      self.context_length_cached = context_length
+      indexes = torch.arange(0,context_length, device= device).float()
+      freqs = torch.outer(indexes,self.thetas).to(device)
+      self.cos_cached = freqs.cos().view(1, context_length, 1, dim)
+      self.sin_cached = freqs.sin().view(1, context_length, 1, dim)
+
+  def rotate_embedding(self, v):
+    d = v.shape[-1]//2
+    v1 = v[..., :d]
+    v2 = v[..., d:]
+    d1 = v1 * self.cos_cached + v2 * self.sin_cached
+    d2 = v1 * (-self.sin_cached) + v2 * self.cos_cached
+    return torch.cat([d1, d2], dim=-1)
+
 class MultiHeadAttention(nn.Module):
   def __init__(self, config):
     super().__init__()
@@ -23,12 +50,16 @@ class MultiHeadAttention(nn.Module):
     self.key_head = nn.Linear(self.n_embed, self.n_embed, bias=False)
     self.value_head = nn.Linear(self.n_embed, self.n_embed, bias= False)
     self.proj = nn.Linear(self.n_embed, self.n_embed, bias=False)
+    self.rotary = RoPE(self.head_size)
 
   def forward(self, x):
     B,T,E = x.shape
     q = self.query_head(x).view(B, T, self.n_heads, self.head_size)
     k = self.key_head(x).view(B, T, self.n_heads, self.head_size)
     v = self.value_head(x).view(B, T, self.n_heads, self.head_size)
+    self.rotary(q)
+    q = self.rotary.rotate_embedding(q)
+    v = self.rotary.rotate_embedding(v)
     out = F.scaled_dot_product_attention(q.transpose(1,2), k.transpose(1,2), v.transpose(1,2), is_causal=True)
     out = out.transpose(1, 2).contiguous().view(B,T,E)
     out = self.proj(out)
@@ -62,7 +93,6 @@ class MiniGPT(nn.Module):
   def __init__(self, config):
     super().__init__()
     self.token_embedding_table = nn.Embedding(config.vocab_size,config.n_embed) #Returns the token embeddings
-    self.pos_embedding_table = nn.Embedding(config.context_length,config.n_embed)
     self.blocks = nn.Sequential(*[Block(config)for _ in range(config.n_layers)])
     self.ln = nn.LayerNorm(config.n_embed)
     self.lm_head = nn.Linear(config.n_embed, config.vocab_size, bias=False)
@@ -82,10 +112,7 @@ class MiniGPT(nn.Module):
   def forward(self, idx, targets=None):
     #idx and targets are both (B,T) tensors
     B,T = idx.shape
-    tok_embed = self.token_embedding_table(idx)                     #embedding object you give it a tensor and returns to you the embedding for each input #(B,T,n_embed)
-    pos_embed = self.pos_embedding_table(torch.arange(T, device=device).expand(B,-1))
-    #You did not have to do the expand because pytorch does broadcasting for unmatched dimentions
-    x = tok_embed + pos_embed  #(B,T,C)
+    x = self.token_embedding_table(idx)                     #embedding object you give it a tensor and returns to you the embedding for each input #(B,T,n_embed)
     x = self.blocks(x)
     x = self.ln(x)
     logits = self.lm_head(x)                #(B,T,vocab_size)
