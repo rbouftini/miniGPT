@@ -12,19 +12,19 @@ torch.manual_seed(1337)
 
 context_length = 512
 batch_size = 32
-n_embed = 768  #Number of embedding dimensions
+n_embed = 512  #Number of embedding dimensions
 n_layers = 8
 n_heads = 8
 eval_iter = 20
 max_iters = 2000  # For 1 epoch
-training_steps = max_iters * 4 # For training on 4 epochs
+training_steps = max_iters * 2 # For training on 2 epochs
 warmup_steps = 20
-max_lr = 6e-4
-min_lr = 6e-5
+max_lr = 3e-3
+min_lr = 3e-4
 vocab_size = 32209
 weight_decay = 0.1
 resume_training = False
-total_batch_size = 212992
+total_batch_size = 112000
 grad_accum_steps = total_batch_size // (context_length * batch_size)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 max_steps = 2000
