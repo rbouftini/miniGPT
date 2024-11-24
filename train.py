@@ -19,8 +19,7 @@ eval_iter = 20
 max_iters = 2000  # For 1 epoch
 training_steps = max_iters * 2 # For training on 2 epochs
 warmup_steps = 20
-max_lr = 3e-3
-min_lr = 3e-4
+learning_rate = 3e-3
 vocab_size = 32209
 weight_decay = 0.1
 resume_training = False
@@ -79,7 +78,7 @@ model = MiniGPT(config).to(device)
 train_loader = DataLoader("train.bin", batch_size, context_length)
 val_loader = DataLoader("val.bin", batch_size, context_length)
 
-optimizer = model.configure_optimizer(weight_decay, learning_rate=max_lr, betas=(0.9,0.95))
+optimizers = model.configure_optimizer(weight_decay, learning_rate_adam=learning_rate, learning_rate_muon= learning_rate, betas=(0.9,0.95), momentum_muon=0.95)
 
 model = torch.compile(model)
 scaler = torch.amp.GradScaler(device=device)
@@ -120,20 +119,24 @@ while True:
         loss = loss / grad_accum_steps
         scaler.scale(loss).backward() 
         train_loss += loss.detach()
-
-    # Get new Learning rate    
-    lr = get_lr(step)
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
+    
+    for optimizer in optimizers:
+      for param_group in optimizer.param_groups:
+        lr = param_group["lr"]
+        lr = get_lr(step, lr)
+        param_group["lr"] = lr
 
     # Gradient clipping  
-    scaler.unscale_(optimizer)  
+    for optimizer in optimizers:
+      scaler.unscale_(optimizer) 
     nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-    scaler.step(optimizer)
+
+    for optimizer in optimizers:
+      scaler.step(optimizer)
     scaler.update()
 
     # Zeroing out gradients from the previous step
-    optimizer.zero_grad(set_to_none=True)
+    model.zero_grad(set_to_none=True)
     torch.cuda.synchronize()
     end_time = time.time()
     time_taken = end_time - start_time

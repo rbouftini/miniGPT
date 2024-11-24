@@ -5,6 +5,62 @@ from torch.nn import functional as F
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
+# Muon optimizer   https://github.com/KellerJordan/Muon/blob/master/muon.py
+
+def zeropower_via_svd(G, steps=None):
+    U, S, V = G.svd()
+    return U @ V.T
+
+#G should be bfloat16()
+@torch.compile
+def zeropower_via_newtonschulz5(G, steps=10, eps=1e-7):
+    assert len(G.shape) == 2
+    a, b, c = (3.4445, -4.7750,  2.0315)
+    X = G / (G.norm() + eps) # ensure top singular value <= 1
+    if G.size(0) > G.size(1):
+        X = X.T
+    for _ in range(steps):
+        A = X @ X.T
+        B = A @ X
+        X = a * X + b * B + c * A @ B
+    if G.size(0) > G.size(1):
+        X = X.T
+    return X.to(G.dtype)
+
+zeropower_backends = dict(svd=zeropower_via_svd, newtonschulz5=zeropower_via_newtonschulz5)
+
+class Muon(torch.optim.Optimizer):
+    def __init__(self, params, lr=3e-4, momentum=0.95, nesterov=True, backend='newtonschulz5', backend_steps=5):
+        defaults = dict(lr=lr, momentum=momentum, nesterov=nesterov, backend=backend, backend_steps=backend_steps)
+        super().__init__(params, defaults)
+
+    def step(self):
+        for group in self.param_groups:
+            lr = group['lr']
+            momentum = group['momentum']
+            zeropower_backend = zeropower_backends[group['backend']]
+            for p in group['params']:
+                g = p.grad
+                if g is None:
+                    continue
+                state = self.state[p]
+                if 'momentum_buffer' not in state:
+                    state['momentum_buffer'] = torch.zeros_like(g)
+                buf = state['momentum_buffer']
+                buf.mul_(momentum).add_(g)
+                if group['nesterov']:
+                    g = g.add(buf, alpha=momentum)
+                if g.size(0) == 3 * g.size(1): # split grouped QKV parameters
+                    g = torch.cat([zeropower_backend(g1, steps=group['backend_steps']) for g1 in g.split(g.size(1))])
+                    scale = g.size(1)**0.5
+                else:
+                    g = zeropower_backend(g, steps=group['backend_steps'])
+                    scale = max(g.size(0), g.size(1))**0.5 # scale to have update.square().mean() == 1
+                p.data.add_(g, alpha=-lr * scale)
+
+# -----------------------------------------------------------------------------
+
+
 @dataclass
 class MiniGPTConfig():
     vocab_size : int = 32209
@@ -138,16 +194,31 @@ class MiniGPT(nn.Module):
       next_token = torch.multinomial(probs,num_samples=1)    #multiomial generates an index from the probability distribution
       idx = torch.cat((idx,next_token), dim = 1)
     return idx
-  
-  def configure_optimizer(self, weight_decay, learning_rate, betas):
-        param_dict = {pn: p for pn, p in self.named_parameters()}
-        param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
-        decay_params = [p for n, p in param_dict.items() if p.dim() >= 2]
-        nodecay_params = [p for n, p in param_dict.items() if p.dim() < 2]
-        optim_groups = [
-            {'params': decay_params, 'weight_decay': weight_decay},
-            {'params': nodecay_params, 'weight_decay': 0.0}
-        ]
-        optimizer = torch.optim.AdamW(optim_groups,lr=learning_rate, betas=betas, eps=1e-8, fused= True)
 
-        return optimizer
+  def configure_optimizer(self, weight_decay, learning_rate_adam, learning_rate_muon, betas, momentum_muon):
+    param_dict_adam = {}
+    param_dict_muon = {}
+    for name, param in self.named_parameters():
+      if ("blocks" not in name) or param.dim() < 2 :
+        param_dict_adam[name] = param
+      else:
+        param_dict_muon[name] = param  
+
+    decay_params_adam = [param for name, param in param_dict_adam.items() if param.dim() >= 2 ]
+    nodecay_params_adam = [param for name, param in param_dict_adam.items() if param.dim() < 2]
+    decay_params_muon = [param for name, param in param_dict_muon.items()]   
+
+    optim_groups_adam = [
+        {'params': decay_params_adam, 'weight_decay': weight_decay},
+        {'params': nodecay_params_adam, 'weight_decay': 0.0}
+    ]
+
+    optim_groups_muon = [
+        {'params': decay_params_muon, 'weight_decay': weight_decay}
+    ]
+
+    optimizer1 = torch.optim.AdamW(optim_groups_adam,lr=learning_rate_adam, betas=betas, eps=1e-8, fused= True)
+    optimizer2 = Muon(optim_groups_muon, lr=learning_rate_muon, momentum= momentum_muon)
+    optimizers = [optimizer1, optimizer2]
+
+    return optimizers
