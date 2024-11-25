@@ -87,10 +87,11 @@ checkpoints_dir = "checkpoints"
 os.makedirs(checkpoints_dir, exist_ok=True)
 
 if resume_training == True:
-   checkpoint_dir = os.path.join(checkpoints_dir,"step_600.pt")
+   checkpoint_dir = os.path.join(checkpoints_dir,"step_500.pt")
    state_dict = torch.load(checkpoint_dir, map_location= device)
    model.load_state_dict(state_dict["model"])
-   optimizer.load_state_dict(state_dict["optimizer_state_dict"])
+   for optimizer, state in zip(optimizers, state_dict["optimizer_states"]):
+        optimizer.load_state_dict(state)
    loss = state_dict["val_loss"]
    step = state_dict["step"]
 
@@ -148,7 +149,7 @@ while True:
       checkpoint_path = os.path.join(checkpoints_dir, f"step_{step}.pt")
       checkpoint = {
           'model': model.state_dict(),
-          'optimizer_state_dict': optimizer.state_dict(),
+          'optimizer_states': [opt.state_dict() for opt in optimizers],
           'step': step,
           'val_loss': validation_loss
         }
