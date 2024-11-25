@@ -15,33 +15,31 @@ batch_size = 32
 n_embed = 512  #Number of embedding dimensions
 n_layers = 8
 n_heads = 8
-eval_iter = 20
-max_iters = 2000  # For 1 epoch
-training_steps = max_iters * 2 # For training on 2 epochs
-warmup_steps = 20
+eval_steps = 20
+max_steps = 2000 * 4 # Training for 4 epochs
+warmup_steps = 0
+warmdown_steps = 400
 learning_rate_adam = 3e-3
 learning_rate_muon = 3e-4
 vocab_size = 32209
 weight_decay = 0.1
 resume_training = False
-total_batch_size = 112000
+total_batch_size = 100000
 grad_accum_steps = total_batch_size // (context_length * batch_size)
 device = "cuda" if torch.cuda.is_available() else "cpu"
-max_steps = 2000
 
-# learning rate decay scheduler (cosine with warmup)
-def get_lr(it):
+# learning rate decay scheduler WSD
+def get_lr(it, lr):
     # 1) linear warmup for warmup_iters steps
     if it < warmup_steps:
-        return max_lr * it / warmup_steps
-    # 2) if it > lr_decay_iters, return min learning rate
-    if it > max_iters:
-        return min_lr
-    # 3) in between, use cosine decay down to min learning rate
-    decay_ratio = (it - warmup_steps) / (max_iters - warmup_steps)
-    assert 0 <= decay_ratio <= 1
-    coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff ranges 0..1
-    return min_lr + coeff * (max_lr - min_lr)
+        return lr * (it+1) / warmup_steps
+    # 2) Stable learning rate
+    if it < max_steps - warmdown_steps:
+        return lr
+    # 3) Decay learning rate
+    else:
+      decay_ratio = (max_steps - it) / warmdown_steps
+      return lr * decay_ratio
 
 model_parameters = dict( vocab_size = vocab_size, context_length = context_length, n_embed = n_embed, n_layers = n_layers,
     n_heads = n_heads)
@@ -79,7 +77,7 @@ model = MiniGPT(config).to(device)
 train_loader = DataLoader("train.bin", batch_size, context_length)
 val_loader = DataLoader("val.bin", batch_size, context_length)
 
-optimizers = model.configure_optimizer(weight_decay, learning_rate_adam=learning_rate, learning_rate_muon= learning_rate, betas=(0.9,0.95), momentum_muon=0.95)
+optimizers = model.configure_optimizer(weight_decay, learning_rate_adam=learning_rate_adam, learning_rate_muon= learning_rate_muon, betas=(0.9,0.95), momentum_muon=0.95)
 
 model = torch.compile(model)
 scaler = torch.amp.GradScaler(device=device)
@@ -89,7 +87,7 @@ checkpoints_dir = "checkpoints"
 os.makedirs(checkpoints_dir, exist_ok=True)
 
 if resume_training == True:
-   checkpoint_dir = os.path.join(checkpoints_dir,"step_2000.pt")
+   checkpoint_dir = os.path.join(checkpoints_dir,"step_600.pt")
    state_dict = torch.load(checkpoint_dir, map_location= device)
    model.load_state_dict(state_dict["model"])
    optimizer.load_state_dict(state_dict["optimizer_state_dict"])
@@ -100,27 +98,27 @@ if resume_training == True:
 def get_validation_loss():
   model.eval()
   total_loss = 0.0
-  for iter in range(eval_iter):
-    xb, yb = val_loader.get_batch("val")
+  for iter in range(eval_steps):
+    xb, yb = val_loader.get_batch()
     with torch.autocast(device_type=device, dtype=torch.float16):
       _ , loss = model(xb,yb)
     total_loss += loss.item()
-  total_loss /= eval_iter
+  total_loss /= eval_steps
   model.train()
   return total_loss
-
 
 while True:
     train_loss = 0.0
     start_time = time.time()
+    
     for small_grad_step in range(grad_accum_steps):
-        xb, yb = train_loader.get_batch("train")
+        xb, yb = train_loader.get_batch()
         with torch.autocast(device_type=device, dtype=torch.float16):
           logits, loss = model(xb, yb)
         loss = loss / grad_accum_steps
-        scaler.scale(loss).backward() 
+        scaler.scale(loss).backward()
         train_loss += loss.detach()
-    
+
     for i, optimizer in enumerate(optimizers):
       scaler.unscale_(optimizer) 
       lr = learning_rate_adam if i==0 else learning_rate_muon
@@ -141,9 +139,9 @@ while True:
     time_taken = end_time - start_time
 
     # Print step time and losses periodically
-    if step % 50 == 0:
-        validation_loss = get_validation_loss()
-        print(f"step {step}, train loss:{train_loss:.4f},  validation loss: {validation_loss:.4f}, lr: {lr:.6e}, time: {time_taken:.4f} seconds")
+    if step % 20 == 0:
+      validation_loss = get_validation_loss()
+      print(f"step {step}, train loss:{train_loss:.4f},  validation loss: {validation_loss:.4f}, time: {time_taken:.4f} seconds")
 
     # Saving checkpoint
     if step > 0 and step % 500 == 0 :
@@ -156,7 +154,7 @@ while True:
         }
       torch.save(checkpoint, checkpoint_path)
 
-    if step == training_steps:
+    if step == max_steps:
        break
     else:
        step += 1
