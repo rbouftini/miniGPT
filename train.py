@@ -19,7 +19,8 @@ eval_iter = 20
 max_iters = 2000  # For 1 epoch
 training_steps = max_iters * 2 # For training on 2 epochs
 warmup_steps = 20
-learning_rate = 3e-3
+learning_rate_adam = 3e-3
+learning_rate_muon = 3e-4
 vocab_size = 32209
 weight_decay = 0.1
 resume_training = False
@@ -120,15 +121,13 @@ while True:
         scaler.scale(loss).backward() 
         train_loss += loss.detach()
     
-    for optimizer in optimizers:
-      for param_group in optimizer.param_groups:
-        lr = param_group["lr"]
-        lr = get_lr(step, lr)
-        param_group["lr"] = lr
-
-    # Gradient clipping  
-    for optimizer in optimizers:
+    for i, optimizer in enumerate(optimizers):
       scaler.unscale_(optimizer) 
+      lr = learning_rate_adam if i==0 else learning_rate_muon
+      for param_group in optimizer.param_groups:
+        param_group["lr"] = get_lr(step, lr)
+      
+    #Gradient clipping
     nn.utils.clip_grad_norm_(model.parameters(), 1.0)
 
     for optimizer in optimizers:
