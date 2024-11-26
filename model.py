@@ -16,7 +16,7 @@ def zeropower_via_svd(G, steps=None):
 def zeropower_via_newtonschulz5(G, steps=10, eps=1e-7):
     assert len(G.shape) == 2
     a, b, c = (3.4445, -4.7750,  2.0315)
-    X = G / (G.norm() + eps) # ensure top singular value <= 1
+    X = G.float() / (G.norm() + eps) # ensure top singular value <= 1
     if G.size(0) > G.size(1):
         X = X.T
     for _ in range(steps):
@@ -126,7 +126,7 @@ class FeedForward(nn.Module):
     super().__init__()
     self.l1 = nn.Linear(n_embed,4*n_embed, bias=False)
     self.l2 = nn.Linear(4*n_embed,n_embed, bias=False)
-    
+
   def forward(self,x):
     x = self.l1(x)
     x = F.relu(x).square()
@@ -173,6 +173,8 @@ class MiniGPT(nn.Module):
     x = self.blocks(x)
     x = self.ln(x)
     logits = self.lm_head(x)                #(B,T,vocab_size)
+    logits = 30 * torch.tanh(logits / 30)
+    logits = logits.float()
 
     if targets==None:
       return logits
