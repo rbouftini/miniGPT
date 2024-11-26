@@ -124,13 +124,14 @@ class MultiHeadAttention(nn.Module):
 class FeedForward(nn.Module):
   def __init__(self, n_embed):
     super().__init__()
-    self.net = nn.Sequential(
-        nn.Linear(n_embed,4*n_embed),
-        nn.ReLU(),
-        nn.Linear(4*n_embed,n_embed),
-    )
+    self.l1 = nn.Linear(n_embed,4*n_embed, bias=False)
+    self.l2 = nn.Linear(4*n_embed,n_embed, bias=False)
+    
   def forward(self,x):
-    return self.net(x)
+    x = self.l1(x)
+    x = F.relu(x).square()
+    x = self.l2(x)
+    return x
 
 class Block(nn.Module):
   def __init__(self,config):
