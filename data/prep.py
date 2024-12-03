@@ -21,9 +21,12 @@ tokenizer = AutoTokenizer.from_pretrained("tokenizer")
 
 # Function to process each example
 def process(example):
-    tokens_ids = [tokenizer.eos_token_id]
-    tokens_ids.extend(tokenizer.encode(example["text"]))
-    return {"token_ids": tokens_ids, "len": len(tokens_ids)}
+    if isinstance(example["text"], str):
+        tokens_ids = [tokenizer.eos_token_id]
+        tokens_ids.extend(tokenizer.encode(example["text"]))
+        return {"token_ids": tokens_ids, "len": len(tokens_ids)}
+    else:
+        return {"token_ids": [], "len": 0}
 
 # Process the dataset
 new_dataset = split_dataset.map(
