@@ -1,2 +1,2 @@
 # miniGPT
-A small GPT model trained for Darija (Moroccan dialect) text generation.
+A small GPT model trained for Arabic text generation to support an educational platform.
