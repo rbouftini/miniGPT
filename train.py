@@ -26,6 +26,7 @@ weight_decay = 0.1
 resume_training = False
 total_batch_size = 100000
 grad_accum_steps = total_batch_size // (context_length * batch_size)
+best_val_loss = float("+inf")
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # learning rate decay scheduler WSD
@@ -145,8 +146,10 @@ while True:
       print(f"step {step}, train loss:{train_loss:.4f},  validation loss: {validation_loss:.4f}, time: {time_taken:.4f} seconds")
 
     # Saving checkpoint
-    if step > 0 and step % 500 == 0 :
-      checkpoint_path = os.path.join(checkpoints_dir, f"step_{step}.pt")
+    if validation_loss < best_val_loss:
+      best_val_loss = validation_loss
+      print("Saving checkpoint...")
+      checkpoint_path = os.path.join(checkpoints_dir, f"checkpoint.pt")
       checkpoint = {
           'model': model.state_dict(),
           'optimizer_states': [opt.state_dict() for opt in optimizers],
