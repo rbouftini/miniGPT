@@ -10,21 +10,22 @@ from model import MiniGPTConfig, MiniGPT
 
 torch.manual_seed(1337)
 
-context_length = 512
-batch_size = 32
-n_embed = 512  #Number of embedding dimensions
-n_layers = 8
-n_heads = 8
+context_length = 1024
+batch_size = 24
+n_embed = 768  #Number of embedding dimensions
+n_layers = 12
+n_heads = 6
 eval_steps = 20
-max_steps = 2000 * 4 # Training for 4 epochs
+max_steps = 44912 # Training for 4 epochs
 warmup_steps = 0
-warmdown_steps = 400
-learning_rate_adam = 3e-3
-learning_rate_muon = 3e-4
-vocab_size = 32209
+warmdown_steps = 12576
+warmup_batch = 1500
+learning_rate_adam = 1e-3
+learning_rate_muon = 1e-4
+vocab_size = 64008
 weight_decay = 0.1
 resume_training = False
-total_batch_size = 100000
+total_batch_size = 524288
 grad_accum_steps = total_batch_size // (context_length * batch_size)
 best_val_loss = float("+inf")
 device = "cuda" if torch.cuda.is_available() else "cpu"
