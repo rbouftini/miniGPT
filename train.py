@@ -102,7 +102,7 @@ def get_validation_loss():
   total_loss = 0.0
   for iter in range(eval_steps):
     xb, yb = val_loader.get_batch()
-    with torch.autocast(device_type=device, dtype=torch.float16):
+    with torch.autocast(device_type=device, dtype=torch.bfloat16):
       _ , loss = model(xb,yb)
     total_loss += loss.item()
   total_loss /= eval_steps
@@ -115,14 +115,13 @@ while True:
     
     for small_grad_step in range(grad_accum_steps):
         xb, yb = train_loader.get_batch()
-        with torch.autocast(device_type=device, dtype=torch.float16):
+        with torch.autocast(device_type=device, dtype=torch.bfloat16):
           logits, loss = model(xb, yb)
         loss = loss / grad_accum_steps
-        scaler.scale(loss).backward()
         train_loss += loss.detach()
+        loss.backward()
 
     for i, optimizer in enumerate(optimizers):
-      scaler.unscale_(optimizer) 
       lr = learning_rate_adam if i==0 else learning_rate_muon
       for param_group in optimizer.param_groups:
         param_group["lr"] = get_lr(step, lr)
@@ -131,8 +130,7 @@ while True:
     nn.utils.clip_grad_norm_(model.parameters(), 1.0)
 
     for optimizer in optimizers:
-      scaler.step(optimizer)
-    scaler.update()
+      optimizer.step()
 
     # Zeroing out gradients from the previous step
     model.zero_grad(set_to_none=True)

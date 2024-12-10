@@ -11,12 +11,12 @@ def zeropower_via_svd(G, steps=None):
     U, S, V = G.svd()
     return U @ V.T
 
-#G should be bfloat16()
+#G to be bfloat16()
 @torch.compile
 def zeropower_via_newtonschulz5(G, steps=10, eps=1e-7):
     assert len(G.shape) == 2
     a, b, c = (3.4445, -4.7750,  2.0315)
-    X = G.float() / (G.norm() + eps) # ensure top singular value <= 1
+    X = G.bfloat16() / (G.norm() + eps) # ensure top singular value <= 1
     if G.size(0) > G.size(1):
         X = X.T
     for _ in range(steps):
@@ -85,8 +85,8 @@ class RoPE(nn.Module):
       self.context_length_cached = context_length
       indexes = torch.arange(0,context_length, device= device).float()
       freqs = torch.outer(indexes,self.thetas).to(device)
-      self.cos_cached = freqs.cos().view(1, context_length, 1, dim)
-      self.sin_cached = freqs.sin().view(1, context_length, 1, dim)
+      self.cos_cached = freqs.cos().bfloat16().view(1, context_length, 1, dim)
+      self.sin_cached = freqs.sin().bfloat16().view(1, context_length, 1, dim)
 
   def rotate_embedding(self, v):
     d = v.shape[-1]//2
