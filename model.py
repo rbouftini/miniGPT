@@ -116,7 +116,7 @@ class MultiHeadAttention(nn.Module):
     self.rotary(q)
     q = self.rotary.rotate_embedding(q)
     v = self.rotary.rotate_embedding(v)
-    q, k = F.rms_norm(q, q.shape[-1]), F.rms_norm(k, k.shape[-1])
+    q, k = F.rms_norm(q, (q.shape[-1],)), F.rms_norm(k, (k.shape[-1],))
     out = F.scaled_dot_product_attention(q.transpose(1,2), k.transpose(1,2), v.transpose(1,2), is_causal=True)
     out = out.transpose(1, 2).contiguous().view(B,T,E)
     out = self.proj(out)
@@ -141,8 +141,8 @@ class Block(nn.Module):
     self.ffwd = FeedForward(config.n_embed)
 
   def forward(self, x):
-    x = x + self.ma_head(F.rms_norm(x, x.shape[-1]))
-    x = x + self.ffwd(F.rms_norm(x, x.shape[-1]))
+    x = x + self.ma_head(F.rms_norm(x, (x.shape[-1],)))
+    x = x + self.ffwd(F.rms_norm(x, (x.shape[-1],)))
     return x
 
 class MiniGPT(nn.Module):
@@ -169,7 +169,7 @@ class MiniGPT(nn.Module):
     B,T = idx.shape
     x = self.token_embedding_table(idx)                     #embedding object you give it a tensor and returns to you the embedding for each input #(B,T,n_embed)
     x = self.blocks(x)
-    x = F.rms_norm(x, x.shape[-1])
+    x = F.rms_norm(x, (x.shape[-1],))
     logits = self.lm_head(x)                #(B,T,vocab_size)
     logits = 30 * torch.tanh(logits / 30)
     logits = logits.float()

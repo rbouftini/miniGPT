@@ -82,7 +82,6 @@ val_loader = DataLoader("val.bin", batch_size, context_length)
 optimizers = model.configure_optimizer(weight_decay, learning_rate_adam=learning_rate_adam, learning_rate_muon= learning_rate_muon, betas=(0.9,0.95), momentum_muon=0.95)
 
 model = torch.compile(model)
-scaler = torch.amp.GradScaler(device=device)
 
 step = 0
 checkpoints_dir = "checkpoints"
@@ -148,7 +147,7 @@ while True:
     if validation_loss < best_val_loss:
       best_val_loss = validation_loss
       print("Saving checkpoint...")
-      checkpoint_path = os.path.join(checkpoints_dir, f"checkpoint.pt")
+      checkpoint_path = os.path.join(checkpoints_dir, f"checkpoint_{step}.pt")
       checkpoint = {
           'model': model.state_dict(),
           'optimizer_states': [opt.state_dict() for opt in optimizers],
